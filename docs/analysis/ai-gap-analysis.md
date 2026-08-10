@@ -1,413 +1,535 @@
-## 1. Executive Summary
+## 1) Application Purpose
 
-Spring PetClinic is a lightweight veterinary clinic management application focused on maintaining **Owners**, their **Pets**, and **Visits**, plus viewing **Veterinarians** and their **Specialties**. It provides basic CRUD-style workflows through a server-rendered Thymeleaf UI and persists data with Spring Data JPA to H2/MySQL/PostgreSQL.
+Spring PetClinic is a server-rendered web application for a veterinary clinic to maintain **owner records**, **pets owned by each owner**, and **visits for each pet**, and to display a **veterinarian directory** with specialties.
 
-From a business perspective, the app covers only “front-desk record keeping” at a minimal level. Key operational capabilities common in real clinics—**appointment scheduling, staff access control, billing, clinical records depth, reporting, and administration of reference data (pet types/specialties)**—are missing. The biggest realistic capstone opportunity is to add **true appointment scheduling with conflict prevention** (vs. the current “add a visit record” behavior).
+**Repository evidence**
+- Landing page: `src/main/java/org/springframework/samples/petclinic/system/WelcomeController.java` (`GET /` → `welcome`)
+- Owner CRUD + search: `src/main/java/.../owner/OwnerController.java`
+- Pet add/edit under owner: `src/main/java/.../owner/PetController.java`
+- Visit creation under pet: `src/main/java/.../owner/VisitController.java`
+- Vet list + JSON endpoint: `src/main/java/.../vet/VetController.java`
 
 ---
 
-## 2. Application Overview
+## 2) Primary Users / Personas
 
-### Purpose
-Maintain basic clinic records:
-- owners and contact details
-- pets owned by an owner (type, birth date)
-- visits for a pet (date, description)
-- veterinarian directory (name and specialties)
+1. **Receptionist / Front Desk**
+    - Finds owners, adds/edits owner details, adds pets, records (“books”) visits.
+    - Evidence: Owner/Pet/Visit controllers and corresponding templates.
 
-**Evidence**
-- Controllers: `OwnerController`, `PetController`, `VisitController`, `VetController` under `src/main/java/...`
-- DB schema supports owners/pets/visits/vets: `src/main/resources/db/**/schema.sql`
-
-### Primary user personas
-1. **Receptionist / Front Desk Staff**
-    - searches owners, registers new owners, adds pets, books visits
 2. **Veterinarian**
-    - views owner/pet history and previous visits (as basic context)
-3. **Clinic Manager / Administrator (implicit, not supported with roles)**
-    - would need reporting, user access control, configuration (pet types, specialties)
+    - Views owner detail page to see pets and previous visit descriptions.
+    - Evidence: Owner detail view includes pets + visit history: `templates/owners/ownerDetails.html`
 
-**Evidence**
-- UI and controllers only support the above activities; no authentication/roles exist (no Spring Security dependency in `pom.xml` / `build.gradle`).
+3. **Clinic Manager / Admin (implicit, not implemented as a role)**
+    - Would need reporting, configuration of pet types/specialties, access controls.
+    - Evidence of absence: no authentication/roles in codebase; pet types/specialties exist only as reference data (DB scripts) with no admin UI.
 
 ---
 
-## 3. Existing Functional Areas (What the app already does)
+## 3) Existing Functional Areas (What exists today)
 
-### A) Owner Management
-- Find owners by last name prefix, paginated
-- Create new owner
-- Edit owner
-- View owner details including pets and visits
-
-**Evidence**
-- `src/main/java/.../owner/OwnerController.java` (`/owners/find`, `/owners`, `/owners/new`, `/owners/{ownerId}`, `/owners/{ownerId}/edit`)
-- Views: `src/main/resources/templates/owners/*`
-
-### B) Pet Management (within an owner)
-- Add new pet to an owner
-- Edit pet details
-- Pet type selection from reference table `types`
-- Enforces unique pet name per owner (case-insensitive)
+### A. Owner Management
+- Create owner (`/owners/new`)
+- Edit owner (`/owners/{ownerId}/edit`)
+- Find owners by last name prefix (paginated)
+- View owner details
 
 **Evidence**
-- `src/main/java/.../owner/PetController.java` (`/owners/{ownerId}/pets/new`, `/owners/{ownerId}/pets/{petId}/edit`)
-- Unique constraint in schema:
+- `src/main/java/.../owner/OwnerController.java`
+- `src/main/java/.../owner/OwnerRepository.java` (`findByLastNameStartingWith(String, Pageable)`)
+- Templates:
+    - `src/main/resources/templates/owners/findOwners.html`
+    - `src/main/resources/templates/owners/ownersList.html`
+    - `src/main/resources/templates/owners/ownerDetails.html`
+    - `src/main/resources/templates/owners/createOrUpdateOwnerForm.html`
+
+### B. Pet Management (per owner)
+- Add pet to owner (`/owners/{ownerId}/pets/new`)
+- Edit pet (`/owners/{ownerId}/pets/{petId}/edit`)
+- Pet type selection from reference data (`types` table)
+- Duplicate pet name prevention per owner (case-insensitive via DB/index + controller validation)
+
+**Evidence**
+- `src/main/java/.../owner/PetController.java`
+- `src/main/java/.../owner/PetTypeRepository.java` (`findPetTypes()`)
+- `src/main/java/.../owner/PetValidator.java` (required fields)
+- DB constraints:
     - H2: `src/main/resources/db/h2/schema.sql` (`unique_owner_pet_name UNIQUE (owner_id, name)`)
     - Postgres: `src/main/resources/db/postgres/schema.sql` (`unique_owner_pet_name ON pets (owner_id, LOWER(name))`)
-- UI: `src/main/resources/templates/pets/createOrUpdatePetForm.html`
+- Template: `src/main/resources/templates/pets/createOrUpdatePetForm.html`
 
-### C) Visit Management (basic “book a visit” record)
-- Create a new visit for a pet with date + description
-- Shows previous visits for the pet
-- Validates visit date is in the future (strictly after “today”)
-
-**Evidence**
-- `src/main/java/.../owner/VisitController.java` (`/owners/{ownerId}/pets/{petId}/visits/new`)
-- Visit model: `src/main/java/.../owner/Visit.java`
-- UI: `src/main/resources/templates/pets/createOrUpdateVisitForm.html`
-
-### D) Vet Directory
-- View paginated list of vets and specialties via UI
-- Also exposes a simple JSON endpoint `/vets`
+### C. Visit Recording (“Booking”)
+- Create a visit for a pet (`/owners/{ownerId}/pets/{petId}/visits/new`)
+- Visit has **date + description**
+- Validation: visit date must be in the future (strictly after today)
+- Displays previous visits in visit form
 
 **Evidence**
-- `src/main/java/.../vet/VetController.java` (`/vets.html`, `/vets`)
-- View: `src/main/resources/templates/vets/vetList.html`
+- `src/main/java/.../owner/VisitController.java`
+- `src/main/java/.../owner/Visit.java` (defaults date to tomorrow, requires `description`)
+- Template: `src/main/resources/templates/pets/createOrUpdateVisitForm.html`
 
-### E) Internationalization (i18n)
-- Language switching with `?lang=xx`
-- Multiple message bundles maintained and tested
+### D. Veterinarian Directory
+- View paginated list of veterinarians and specialties (`/vets.html`)
+- JSON endpoint `/vets` returning `Vets` wrapper object
 
 **Evidence**
-- `src/main/java/.../system/WebConfiguration.java`
-- Message bundles in `src/main/resources/messages/`
-- Test enforcing i18n hygiene: `src/test/java/.../system/I18nPropertiesSyncTest.java`
+- `src/main/java/.../vet/VetController.java`
+- `src/main/java/.../vet/VetRepository.java` (cached `findAll`)
+- Template: `src/main/resources/templates/vets/vetList.html`
+
+### E. Internationalization (i18n) Support
+- Centralized message bundles and tests enforcing translation consistency and no hard-coded UI strings.
+
+**Evidence**
+- `src/main/resources/messages/messages*.properties`
+- `src/test/java/.../system/I18nPropertiesSyncTest.java`
 
 ---
 
-## 4. Primary User Journeys (Current)
+## 4) Main User Journeys (Current)
 
-1. **Find an owner**
-    - User navigates to “Find Owners” → enters last name → sees owners list or redirects to owner if single match  
-      **Evidence:** `OwnerController.processFindForm()` and `templates/owners/findOwners.html`, `ownersList.html`
+1. **Find owner**
+    - User goes to “Find Owners” → enters last name → sees owners list (with paging) or gets redirected to the single match.
+    - Evidence: `OwnerController.initFindForm()` + `OwnerController.processFindForm()`
 
-2. **Register a new owner**
-    - “Add Owner” → complete owner form → redirect to owner details  
-      **Evidence:** `OwnerController.initCreationForm()` + `processCreationForm()`
+2. **Register new owner**
+    - Add Owner → submit owner form → redirect to owner details.
+    - Evidence: `OwnerController.initCreationForm()` + `processCreationForm()`
 
-3. **Add a pet to an owner**
-    - From owner details → “Add New Pet” → fill pet form → returns to owner details  
-      **Evidence:** `PetController.initCreationForm()` + `processCreationForm()`, owner details template shows “Add New Pet” (`templates/owners/ownerDetails.html`)
+3. **Update owner**
+    - From owner details → Edit owner → submit.
+    - Evidence: `OwnerController.initUpdateOwnerForm()` + `processUpdateOwnerForm()`
 
-4. **Edit an existing pet**
-    - From owner details → “Edit Pet” → update fields → return to owner details  
-      **Evidence:** `PetController.initUpdateForm()` + `processUpdateForm()`
+4. **Add pet**
+    - From owner details → Add New Pet → submit pet form.
+    - Evidence: `PetController.initCreationForm()` + `processCreationForm()`
 
-5. **Book a visit (record)**
-    - From owner details → “Add Visit” on a pet → fill date & description → returns to owner details  
-      **Evidence:** `VisitController.initNewVisitForm()` + `processNewVisitForm()`
+5. **Edit pet**
+    - From owner details → Edit Pet → submit pet form.
+    - Evidence: `PetController.initUpdateForm()` + `processUpdateForm()`
 
-6. **View veterinarians**
-    - Navigate to vets list page  
-      **Evidence:** `VetController.showVetList()` and `templates/vets/vetList.html`
+6. **Add (book/record) visit**
+    - From owner details → Add Visit for a pet → fill date + description → submit → returns to owner details.
+    - Evidence: `VisitController.initNewVisitForm()` + `processNewVisitForm()`
 
----
-
-## 5. Current Limitations, User Pain Points, and Business Gaps
-
-### Limitations (system-level)
-- **No authentication/authorization**: anyone can create/edit owners, pets, visits.
-    - **Evidence:** No Spring Security dependencies in `pom.xml`/`build.gradle`; no security config classes.
-
-- **No concept of “appointment scheduling”** beyond a dated visit record:
-    - Visits are tied only to a **pet**; there is no vet assignment, time slot, duration, room, or conflict checking.
-    - **Evidence:** `Visit` has only `visit_date` and `description` (`Visit.java`, DB schema files).
-
-- **No administrative management for reference data** (pet types, vet specialties):
-    - Pet types are read from DB and selectable, but there’s no UI to add/remove types.
-    - **Evidence:** `PetTypeRepository.findPetTypes()` exists; no controller/templates for managing types.
-
-- **Limited search**:
-    - Owners can only be searched by last name prefix; cannot search by phone, city, pet name, or full-text.
-    - **Evidence:** `OwnerRepository.findByLastNameStartingWith(...)`
-
-- **No delete/archive workflows**:
-    - No delete owner/pet/visit; no “inactive” status.
-    - **Evidence:** Controllers only implement create/edit/view; no delete endpoints/templates.
-
-### User pain points (workflow-level)
-- Front desk cannot prevent double-bookings because there is no schedule/time slot or vet assignment.
-- Vet cannot see richer clinical history (diagnosis, treatment, weight, vaccines) beyond free-text “description”.
-- Manager cannot run operational reporting (upcoming visits, visits per vet, repeat customers, etc.).
-- Lack of access control creates operational/compliance risk (anyone can edit records).
+7. **View vets**
+    - Navigate to vets list page with pagination.
+    - Evidence: `VetController.showVetList()`
 
 ---
 
-## 6. Top 5 Realistic Enhancement Opportunities
+## 5) Existing UI Functionality (Thymeleaf server-rendered)
 
-Below are incremental enhancements that fit the current architecture (Spring MVC + Thymeleaf + JPA).
+### Navigation / Layout
+Top-level navigation includes:
+- Home
+- Find owners
+- Veterinarians
+- Error
 
----
+**Evidence**
+- `src/main/resources/templates/fragments/layout.html` (navigation items)
 
-# Enhancement 1: Appointment Scheduling with Time Slots + Conflict Prevention (Recommended)
+### Key UI Screens (current)
+- Owner search (`templates/owners/findOwners.html`)
+- Owner list (`templates/owners/ownersList.html`) with pagination model values `currentPage`, `totalPages`, etc. (from `OwnerController.addPaginationModel()`)
+- Owner details with pets and visits (`templates/owners/ownerDetails.html`)
+- Owner create/update form (`templates/owners/createOrUpdateOwnerForm.html`)
+- Pet create/update form (`templates/pets/createOrUpdatePetForm.html`)
+- Visit create form + previous visits table (`templates/pets/createOrUpdateVisitForm.html`)
+- Vets list (`templates/vets/vetList.html`) with pagination from `VetController`
 
-**Problem:** “Visits” are not true appointments. Clinics need to schedule time-based appointments and avoid double-booking.
-
-**Affected user:** Receptionist, Vet, Manager
-
-**Current state:** A visit stores only a date (no time), no vet assignment, no resource constraints. Validation only checks the date is in the future.
-
-**Evidence (repo):**
-- `Visit` fields: `date`, `description` only (`src/main/java/.../owner/Visit.java`)
-- Visits table: `visit_date`, `description` only (`src/main/resources/db/*/schema.sql`)
-- Booking flow: `VisitController` (`/owners/{ownerId}/pets/{petId}/visits/new`) (`src/main/java/.../owner/VisitController.java`)
-
-**Gap:** Cannot manage daily schedule, cannot detect conflicts, cannot assign vet.
-
-**Proposed capability (high-level):**
-- Add appointment time (and optionally duration) and assign a vet to the visit/appointment.
-- Prevent booking conflicts (e.g., same vet already booked for that time).
-- Provide a simple “Upcoming appointments” view (by date/vet).
-
-**Business value:**
-- Reduces operational errors (double bookings), improves utilization, and supports real clinic workflow.
-
-**User benefit:**
-- Faster, more reliable scheduling; clearer daily plan for vets.
-
-**Priority:** HIGH
-
-**Estimated complexity:** MEDIUM–HIGH  
-(Requires DB changes + new UI views + new validation rules; still feasible as an incremental change.)
-
-**Dependencies:**
-- DB schema updates for H2/MySQL/Postgres (`src/main/resources/db/**/schema.sql` and likely `data.sql`)
-- Domain model changes to `Visit` (and likely relationship to `Vet`)
-- Updates to `VisitController` + templates (`templates/pets/createOrUpdateVisitForm.html`, `owners/ownerDetails.html`)
-- Additional repository query methods (e.g., find appointments by vet/date)
-
-**Risks:**
-- Data migration/backward compatibility with existing visit records (date-only data).
-- More complex validation logic (time zone / boundary conditions).
-- UI usability (selecting times and vets) must remain simple.
-
-**Recommended MVP scope:**
-- Add **visitTime** (or startDateTime) to visits.
-- Add **vet selection** when creating a visit.
-- Implement **conflict check** for the selected vet + time window.
-- Add one “**Daily Schedule**” view (e.g., by date) showing appointments grouped by vet.
+Note: The repository search output for templates is partially abbreviated (headings and table skeletons). The presence of the templates and controller-to-view mappings is verifiable, but the full HTML content wasn’t fully displayed in the search excerpts.
 
 ---
 
-# Enhancement 2: Role-Based Access Control (RBAC) for Clinic Staff
+## 6) Existing Backend Functionality
 
-**Problem:** Any user can create/edit sensitive clinic data. Real clinics require role separation.
+### Architecture pattern
+- Spring MVC controllers + Thymeleaf views
+- Spring Data JPA repositories for persistence
+- Validation via Jakarta Bean Validation and custom validators
+- SQL-based schema/data initialization (not Hibernate DDL auto)
 
-**Affected user:** Manager (security), Receptionist, Vet
+**Evidence**
+- `src/main/resources/application.properties`
+    - `spring.jpa.hibernate.ddl-auto=none`
+    - `spring.sql.init.schema-locations=classpath*:db/${database}/schema.sql`
+    - `spring.sql.init.data-locations=classpath*:db/${database}/data.sql`
 
-**Current state:** No authentication, no roles.
+### Data access
+- Owners: `OwnerRepository extends JpaRepository<Owner, Integer>` supports paging search and save/update.
+- Pet types: `PetTypeRepository extends JpaRepository<PetType, Integer>` + JPQL query ordering.
+- Vets: `VetRepository extends Repository<Vet, Integer>` with cached `findAll()` and paged `findAll(Pageable)`.
 
-**Evidence (repo):**
-- No Spring Security dependency in `pom.xml` / `build.gradle`
-- No login flow, no security configuration classes
+**Evidence**
+- `src/main/java/.../owner/OwnerRepository.java`
+- `src/main/java/.../owner/PetTypeRepository.java`
+- `src/main/java/.../vet/VetRepository.java` (`@Cacheable("vets")`)
 
-**Gap:** No data protection; no audit trail of who changed what.
-
-**Proposed capability (high-level):**
-- Add staff login and roles (e.g., ADMIN, RECEPTIONIST, VET).
-- Restrict who can edit owners/pets/visits.
-- (Optional later) add audit fields.
-
-**Business value:**
-- Reduces compliance risk and unauthorized changes; enables multi-user clinic usage.
-
-**User benefit:**
-- Users see only allowed actions; safer operations.
-
-**Priority:** HIGH
-
-**Estimated complexity:** HIGH  
-(Security integration touches many endpoints and views.)
-
-**Dependencies:**
-- Add Spring Security and configuration
-- Add user identity store (in-memory for MVP, DB later)
-- Update Thymeleaf templates to hide/show actions based on role
-
-**Risks:**
-- Scope creep (password management, user administration).
-- Increased testing needs for authorization rules.
-
-**Recommended MVP scope:**
-- Basic login + two roles (ADMIN and STAFF).
-- Protect all create/edit endpoints; leave read-only pages accessible to STAFF.
+### Validation (existing)
+- Owner: telephone must match `\d{10}`.
+    - Evidence: `Owner.java` with `@Pattern(regexp="\\d{10}", message="{telephone.invalid}")`
+- Pet: custom validation for name/type/birthDate required.
+    - Evidence: `PetValidator.java`
+- Visit:
+    - `description` is `@NotBlank` in `Visit.java`
+    - controller checks visit date must be after today: `VisitController.processNewVisitForm()`
 
 ---
 
-# Enhancement 3: Enhanced Search (Owner + Pet-centric search)
+## 7) Domain Entities and Relationships
 
-**Problem:** Finding records is limited to owner last name prefix; real usage often starts from phone number or pet name.
+### Entities
+- `Owner` extends `Person` extends `BaseEntity`
+- `Vet` extends `Person`
+- `Pet` extends `NamedEntity` extends `BaseEntity`
+- `PetType` extends `NamedEntity`
+- `Visit` extends `BaseEntity`
+- `Specialty` extends `NamedEntity`
 
-**Affected user:** Receptionist, Vet
+**Evidence**
+- `src/main/java/.../model/BaseEntity.java`, `Person.java`, `NamedEntity.java`
+- `src/main/java/.../owner/Owner.java`, `Pet.java`, `PetType.java`, `Visit.java`
+- `src/main/java/.../vet/Vet.java`, `Specialty.java`
 
-**Current state:** Only `OwnerRepository.findByLastNameStartingWith(...)`.
+### Relationships (as implemented)
+- **Owner 1 → N Pets**: `@OneToMany(cascade=ALL, fetch=EAGER)` with `@JoinColumn(owner_id)` in `Owner.java`
+- **Pet N → 1 PetType**: `@ManyToOne` with `@JoinColumn(type_id)` in `Pet.java`
+- **Pet 1 → N Visits**: `@OneToMany(cascade=ALL, fetch=EAGER)` with `@JoinColumn(pet_id)` in `Pet.java`
+- **Vet N ↔ N Specialty**: `@ManyToMany(fetch=EAGER)` via `vet_specialties` join table in `Vet.java`
 
-**Evidence (repo):**
-- `OwnerRepository` method list (`src/main/java/.../owner/OwnerRepository.java`)
-- Find owners UI is last-name only (`templates/owners/findOwners.html`)
-
-**Gap:** Slow record lookup, especially for common last names; cannot locate by pet name.
-
-**Proposed capability (high-level):**
-- Expand search criteria: phone, city, pet name (and optionally partial match).
-- Show combined results with clear disambiguation.
-
-**Business value:**
-- Faster front-desk operations; fewer duplicate owner records created.
-
-**User benefit:**
-- Reduced time to locate the right customer and pet.
-
-**Priority:** MEDIUM
-
-**Estimated complexity:** MEDIUM  
-(Requires additional queries and some UI updates; no deep model changes needed.)
-
-**Dependencies:**
-- New repository queries and/or JPQL joins for pet name searches
-- Update find UI and results templates
-
-**Risks:**
-- Performance considerations for join queries (likely fine for capstone scale).
-- UX complexity if too many filters added.
-
-**Recommended MVP scope:**
-- Add search by **telephone** and **pet name** (two additional fields) alongside last name.
+Key behavior helpers:
+- `Owner.addVisit(petId, visit)` adds a visit onto a selected pet (`Owner.java`)
+- `Owner.getPet(...)` by id/name with ignoreNew option (`Owner.java`)
+- `Pet.addVisit(visit)` (`Pet.java`)
 
 ---
 
-# Enhancement 4: Administrative Management of Reference Data (Pet Types, Vet Specialties)
+## 8) Database Structure / Scripts
 
-**Problem:** The clinic cannot maintain controlled lists (pet types, specialties) through the UI.
+### Initialization approach
+DB is initialized from SQL scripts depending on `database` property (default `h2`).
 
-**Affected user:** Clinic Manager/Admin
+**Evidence**
+- `src/main/resources/application.properties` with `database=h2` and `spring.sql.init.*` locations.
 
-**Current state:** Pet types and specialties are only present as seed data and used for display/selection.
+### Tables (H2 schema representative)
+- `owners` (first_name, last_name, address, city, telephone)
+- `pets` (name, birth_date, type_id, owner_id) + unique(owner_id, name)
+- `visits` (pet_id, visit_date, description)
+- `types` (pet type)
+- `vets` (first_name, last_name)
+- `specialties`
+- `vet_specialties` join table
 
-**Evidence (repo):**
-- Types and specialties are in schema/data (`db/**/data.sql`)
-- `PetTypeRepository` exists, used by `PetController.populatePetTypes()` (`src/main/java/.../owner/PetController.java`)
-- No controllers/templates for managing types/specialties in the repo tree.
+**Evidence**
+- `src/main/resources/db/h2/schema.sql`
+- Equivalent variants:
+    - `src/main/resources/db/mysql/schema.sql`
+    - `src/main/resources/db/postgres/schema.sql`
 
-**Gap:** Requires DB edits to change reference values; not operationally viable.
+### Seed data
+Seed owners/pets/visits/vets/specialties/pet types exist.
 
-**Proposed capability (high-level):**
-- Add admin pages to list/add/edit (and possibly deactivate) pet types and specialties.
-
-**Business value:**
-- Keeps reference data consistent; supports expanding clinic offerings.
-
-**User benefit:**
-- Admin can manage drop-down lists without database access.
-
-**Priority:** MEDIUM
-
-**Estimated complexity:** MEDIUM
-
-**Dependencies:**
-- New controllers, templates, and repository usage for create/update
-- Validation and duplicate prevention rules
-
-**Risks:**
-- Data integrity if types/specialties removed while in use (prefer “inactive” vs delete).
-
-**Recommended MVP scope:**
-- Admin can **add** and **rename** pet types; no delete (or only if unused).
+**Evidence**
+- `src/main/resources/db/h2/data.sql`
+- `src/main/resources/db/mysql/data.sql`
+- `src/main/resources/db/postgres/data.sql`
 
 ---
 
-# Enhancement 5: Reporting Dashboard (Operational Views)
+## 9) Existing Tests (What is covered)
 
-**Problem:** No operational insight (e.g., upcoming visits, activity trends).
+### MVC / Controller tests
+- Extensive MockMvc tests for OwnerController behavior (create, validation errors, search behaviors incl whitespace trimming, update, view owner page).
+  **Evidence**
+- `src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java`
 
-**Affected user:** Manager, Receptionist, Vet
+### Repository / “service” tests (integration style)
+Despite the name, `ClinicServiceTests` verifies repository behavior and entity persistence:
+- find owners by last name
+- insert/update owner
+- pet types retrieval
+- insert pet and generate id
+- update pet
+- find vets & specialties
+- add visit
+- verify visits by pet id
+- enforce duplicate pet name constraint per owner
+  **Evidence**
+- `src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java`
 
-**Current state:** Only per-owner detail view shows visit history; no cross-cutting views.
+### Full application integration tests
+- Boot app, call HTTP endpoints and verify OK
+- VetRepository caching behavior invoked
+  **Evidence**
+- `src/test/java/org/springframework/samples/petclinic/PetClinicIntegrationTests.java`
 
-**Evidence (repo):**
-- Owner details shows pets and visits (`templates/owners/ownerDetails.html`)
-- No reporting controllers/templates found in repository tree.
+### MySQL Testcontainers integration
+- Runs against MySQL container (if Docker available)
+  **Evidence**
+- `src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java`
 
-**Gap:** Cannot answer common questions: “What visits are scheduled tomorrow?” “Which pets haven’t visited recently?”
-
-**Proposed capability (high-level):**
-- Add read-only reports:
-    - Upcoming visits by date range
-    - Visits count by day/week
-    - Top owners by number of visits (optional)
-
-**Business value:**
-- Supports staffing and planning; improves service quality.
-
-**User benefit:**
-- Quick access to daily workload view.
-
-**Priority:** LOW–MEDIUM (depends on clinic size)
-
-**Estimated complexity:** MEDIUM
-
-**Dependencies:**
-- New repository queries (by date range)
-- New views/templates
-
-**Risks:**
-- If paired with “true scheduling,” requirements may overlap (manage scope).
-
-**Recommended MVP scope:**
-- “Upcoming visits (next 7 days)” list, filterable by date.
+### i18n governance tests
+- Ensures no hard-coded strings in HTML and translation keys are in sync
+  **Evidence**
+- `src/test/java/org/springframework/samples/petclinic/system/I18nPropertiesSyncTest.java`
 
 ---
 
-## 7. Recommendation: ONE Enhancement for the Capstone MVP
+## 10) Current Functional Limitations (Verified vs. repo)
 
-### Recommended MVP Enhancement
-**Appointment Scheduling with Time Slots + Conflict Prevention (Enhancement 1)**
+1. **No authentication / authorization**
+    - There are no login flows or role protections in the inspected controllers and build dependencies (no Spring Security shown in inspected build file excerpt earlier; not re-confirmed here but consistent with controller simplicity).
+    - Evidence: controllers expose create/edit endpoints directly (`OwnerController`, `PetController`, `VisitController`) with no security annotations/config observed.
 
-### Why this should be selected
-1. **Meaningful business value:** It transforms PetClinic from a “record logger” into a system that supports an essential real clinic operation: scheduling.
-2. **High user impact:** Directly reduces double-bookings and confusion, improves daily execution for front desk and vets.
-3. **Feasible in existing app structure:** The app already has the “book a visit” journey (`VisitController`, visit form template). This enhancement evolves that workflow rather than adding a separate subsystem.
-4. **Clear boundaries for MVP:** You can deliver scheduling + conflict check + a simple schedule view without expanding into billing, inventory, or full EMR.
+2. **Visits are date-only, not time-based, and not assigned to a vet**
+    - Limits scheduling realism; cannot prevent double booking.
+    - Evidence:
+        - `Visit.java`: only `LocalDate date` and `description`
+        - DB schema `visits.visit_date DATE` with no time fields (`db/**/schema.sql`)
+        - Visit flow binds a Visit to a Pet only: `VisitController.loadPetWithVisit()` and `owner.addVisit(petId, visit)`
 
-### Existing components likely affected (evidence-based)
-- `src/main/java/.../owner/Visit.java` (visit fields)
-- `src/main/java/.../owner/VisitController.java` (booking flow and validation)
-- `src/main/resources/templates/pets/createOrUpdateVisitForm.html` (visit creation form)
-- `src/main/resources/templates/owners/ownerDetails.html` (display of visits)
-- DB scripts: `src/main/resources/db/**/schema.sql` and potentially `data.sql`
-- Potential new/extended repository queries (currently visits are accessed via `Owner` → `Pet` → `visits`, not via a dedicated `VisitRepository`)
+3. **No visit editing/cancellation**
+    - Only “new visit” endpoint exists.
+    - Evidence: `VisitController` only has `/visits/new` GET+POST mappings.
 
-### What should be included in the MVP
-- Time-based appointment input (time or datetime)
-- Vet selection when booking
-- Conflict prevention for vet/time
-- Simple “Daily schedule” read-only page
+4. **Owner search limited to last name prefix**
+    - No search by phone/city/address/pet name.
+    - Evidence: `OwnerRepository.findByLastNameStartingWith(...)`; UI has “Last name” only (`templates/owners/findOwners.html`).
 
-### What should be explicitly deferred
-- Online customer portal / self-booking
-- Notifications (email/SMS)
-- Room management, durations, buffers, recurring appointments
-- Payment/billing integration
-- Full clinical charting (diagnoses, prescriptions, vaccinations)
+5. **No administrative UI for reference data**
+    - Pet types and specialties exist but only as DB seed and selection lists.
+    - Evidence:
+        - `PetTypeRepository.findPetTypes()`
+        - No controllers/templates found for managing `types` or `specialties` in inspected tree.
+
+6. **Delete operations not supported**
+    - No “delete owner/pet/visit” endpoints or repository usage.
+    - Evidence: controllers show create/edit/view; no delete mappings in inspected controllers.
+
+7. **EAGER fetching for pets and visits**
+    - This is more technical, but functionally may degrade performance as data grows (owner always loads all pets; pet always loads all visits).
+    - Evidence: `fetch = FetchType.EAGER` on `Owner.pets` and `Pet.visits`.
 
 ---
 
-## 8. Repository Evidence (Key References)
-- Owner flows: `src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java`
-- Pet flows: `src/main/java/org/springframework/samples/petclinic/owner/PetController.java`
-- Visit booking flow: `src/main/java/org/springframework/samples/petclinic/owner/VisitController.java`
-- Domain models: `src/main/java/org/springframework/samples/petclinic/owner/{Owner,Pet,Visit}.java`, `src/main/java/.../vet/{Vet,Specialty}.java`
-- DB schemas: `src/main/resources/db/h2/schema.sql`, `src/main/resources/db/mysql/schema.sql`, `src/main/resources/db/postgres/schema.sql`
-- UI templates: `src/main/resources/templates/owners/*`, `src/main/resources/templates/pets/*`, `src/main/resources/templates/vets/*`
-- No security: confirmed by absence of Spring Security deps in `pom.xml` / `build.gradle`
+## 11) User Pain Points
+
+1. **Front desk cannot manage real appointment slots**
+    - A “visit” is basically a dated note; there’s no time slot, vet selection, or conflict detection.
+    - Evidence: `Visit.java`, `VisitController`, `visits` table definition.
+
+2. **Record lookup is slow/limited**
+    - If the customer calls in, staff typically searches by phone; not possible here.
+    - Evidence: only last name prefix search exists (`OwnerRepository`, `findOwners.html`).
+
+3. **No cancel/reschedule workflow**
+    - Mistakes require database edits or workaround by adding new visits.
+    - Evidence: no edit/delete endpoints for visits (`VisitController`).
+
+4. **Admin overhead for maintaining reference lists**
+    - Adding a new pet type requires DB-level changes.
+    - Evidence: types are seeded via `db/**/data.sql`; no UI management.
+
+5. **Data governance risk**
+    - Without access control, anyone can change owners/pets/visits.
+    - Evidence: no security layer observed around modifying endpoints.
+
+---
+
+## 12) Business Gaps (What prevents “real clinic” use)
+
+1. **Scheduling & capacity management gap**
+    - No vet assignment, no time slots, no daily schedule view.
+2. **Security & accountability gap**
+    - No user accounts/roles; no ability to separate receptionist vs vet actions.
+3. **Operational reporting gap**
+    - No “upcoming visits”, “today’s appointments”, “visits per vet”, etc.
+4. **Master data management gap**
+    - No admin UI for pet types/specialties.
+5. **Customer service efficiency gap**
+    - Limited search makes quick service difficult and increases duplicate records risk.
+
+---
+
+# TOP 5 Realistic Enhancement Opportunities (Analysis)
+
+## Enhancement 1: Time-based Appointment Scheduling (Visits with Time Slot) + Conflict Checking
+
+- **Problem:** Current “visit booking” cannot represent real appointments or prevent double-booking.
+- **Affected User:** Receptionist, Veterinarian, Manager
+- **Current State:** Visit has only `LocalDate date` and `description`; visit created under a pet, no vet/time slot.
+- **Repository Evidence:**
+    - `src/main/java/.../owner/Visit.java` (fields: `date`, `description`)
+    - `src/main/resources/db/*/schema.sql` (`visits.visit_date DATE`)
+    - `src/main/java/.../owner/VisitController.java` adds visit to pet and validates date > today
+- **Gap:** No time-of-day, no vet assignment, no schedule view, no conflicts prevention.
+- **Proposed Capability:** Add appointment time (e.g., start time / start datetime) and basic conflict validation (at least per pet or per vet if vet selection is added). Provide a simple “daily schedule” list view.
+- **Business Value:** Enables realistic clinic scheduling; reduces booking errors; improves clinic throughput and customer satisfaction.
+- **User Benefit:** Faster, more reliable booking; clear view of upcoming appointments.
+- **Priority:** HIGH
+- **Estimated Complexity:** MEDIUM–HIGH (DB changes across H2/MySQL/Postgres; UI + controller validation)
+- **Dependencies:** DB schema/data scripts; `Visit` model; visit form template; likely new repository/query support for conflict checks.
+- **Risks:** Migration/compatibility with existing date-only data; edge cases (timezone if using datetime); additional UI complexity.
+- **Recommended MVP Scope:**
+    - Add time-of-day to visit (start time)
+    - Update visit form to capture time
+    - Basic conflict check (e.g., prevent duplicate same pet/time; optionally add vet selection if included)
+    - Add “Upcoming appointments (today/tomorrow)” read-only page
+
+---
+
+## Enhancement 2: Enhanced Owner Search (Telephone/City/Pet Name)
+
+- **Problem:** Owners can only be found by last name prefix; inefficient and error-prone.
+- **Affected User:** Receptionist, Veterinarian
+- **Current State:** Search is `findByLastNameStartingWith` only; UI asks for “Last name”.
+- **Repository Evidence:**
+    - `src/main/java/.../owner/OwnerRepository.java` (`findByLastNameStartingWith`)
+    - `src/main/resources/templates/owners/findOwners.html` includes “Last name”
+    - `OwnerController.processFindForm()` uses only `owner.getLastName()`
+- **Gap:** Cannot search by telephone (common real workflow) or by pet name.
+- **Proposed Capability:** Extend search form and results to support telephone and/or pet name (and optionally city).
+- **Business Value:** Faster lookup reduces front-desk time and duplicate record creation.
+- **User Benefit:** Locate the right customer record quickly even with common last names.
+- **Priority:** HIGH (practical day-to-day impact)
+- **Estimated Complexity:** MEDIUM (repository query changes + UI changes + controller branching)
+- **Dependencies:** New repository methods / JPQL queries; update templates for search fields and results display.
+- **Risks:** Result ambiguity if multiple filters; performance of pet-name join query (manageable for capstone).
+- **Recommended MVP Scope:**
+    - Add telephone search (exact match) and pet name (contains/starts-with) as optional fields
+    - Keep last name search as-is; if multiple fields provided, apply precedence rules (analysis-level: define with PO)
+
+---
+
+## Enhancement 3: Visit Management Improvements (Edit/Cancel/Reschedule)
+
+- **Problem:** Mistakes cannot be corrected; no cancel/reschedule flow.
+- **Affected User:** Receptionist, Veterinarian
+- **Current State:** Only “new visit” endpoint exists.
+- **Repository Evidence:**
+    - `src/main/java/.../owner/VisitController.java` only maps `/visits/new`
+    - Owner details UI shows visits but no visit edit/cancel actions (template skeleton: `ownerDetails.html`)
+- **Gap:** No lifecycle management of visits.
+- **Proposed Capability:** Allow editing a visit (date/description) and/or canceling (soft-delete/flag) from pet/owner context.
+- **Business Value:** Reduces data errors; supports real operational adjustments.
+- **User Benefit:** Staff can fix scheduling/recording mistakes without workarounds.
+- **Priority:** MEDIUM
+- **Estimated Complexity:** MEDIUM (new endpoints + UI actions; possibly new persistence patterns)
+- **Dependencies:** UI changes in owner details; controller endpoints; possibly new repository or modify persistence approach (visits currently persisted via owner save cascade).
+- **Risks:** Data integrity if deleting visits; audit/history considerations.
+- **Recommended MVP Scope:**
+    - Add “Edit Visit” (date + description) only
+    - Defer cancellation/delete until governance is agreed
+
+---
+
+## Enhancement 4: Admin UI for Reference Data (Pet Types, Specialties)
+
+- **Problem:** Pet types and specialties are static seed data; no operational way to update.
+- **Affected User:** Manager / Admin
+- **Current State:** Types come from `types` table and are loaded into pet forms; specialties exist for vets.
+- **Repository Evidence:**
+    - `src/main/java/.../owner/PetTypeRepository.java` (`findPetTypes`)
+    - `src/main/resources/db/*/data.sql` inserts into `types` and `specialties`
+    - No admin controllers/templates found in inspected tree for managing these
+- **Gap:** Requires DB changes to update lists; non-technical users can’t maintain data.
+- **Proposed Capability:** Add basic admin pages to list/add/rename pet types and specialties.
+- **Business Value:** Keeps master data accurate; enables clinic growth and consistency.
+- **User Benefit:** Admin updates lists without DB access.
+- **Priority:** MEDIUM
+- **Estimated Complexity:** MEDIUM (CRUD UI + validation; keep simple)
+- **Dependencies:** New controllers and templates; validation and “in use” checks.
+- **Risks:** Deleting types/specialties could break existing records (prefer deactivate/rename only).
+- **Recommended MVP Scope:**
+    - Pet Type management: list + add + rename
+    - Defer delete; optionally add “inactive” later
+
+---
+
+## Enhancement 5: Basic Role-Based Access Control (Staff Login)
+
+- **Problem:** Anyone can modify data; not viable for real clinic operations.
+- **Affected User:** Manager, Receptionist, Vet
+- **Current State:** No security layer observed; modifying endpoints are open.
+- **Repository Evidence:**
+    - Modifying endpoints exist without security gates: `OwnerController`, `PetController`, `VisitController`
+    - No security configuration classes were found in inspected sources; no login UI templates were referenced.
+- **Gap:** No separation of duties or protection against unauthorized edits.
+- **Proposed Capability:** Add login and restrict create/edit actions to staff roles.
+- **Business Value:** Reduces operational/compliance risk; enables multi-user deployment.
+- **User Benefit:** Clear permitted actions; prevents accidental/unauthorized changes.
+- **Priority:** HIGH (for production realism), but may be heavy for capstone scope
+- **Estimated Complexity:** HIGH (cross-cutting change impacting controllers, views, and testing approach)
+- **Dependencies:** Security framework integration; user store; template updates to hide/show actions.
+- **Risks:** Scope creep (password policies, user admin, logout flows, test refactors).
+- **Recommended MVP Scope:**
+    - Simple login + 1–2 roles (e.g., STAFF vs ADMIN)
+    - Protect create/edit endpoints; keep read-only pages accessible to STAFF
+
+---
+
+## Enhancement Comparison Table
+
+| Enhancement | Business Value | User Impact | Complexity | Risk | Priority |
+|---|---:|---:|---:|---:|---|
+| Time-based Appointment Scheduling + conflict checking | Very High | Very High | Med–High | Med | HIGH |
+| Enhanced Owner Search (telephone/pet name) | High | High | Medium | Low–Med | HIGH |
+| Visit Edit/Reschedule | Medium | Medium–High | Medium | Medium | MEDIUM |
+| Admin UI for Pet Types/Specialties | Medium | Medium | Medium | Medium | MEDIUM |
+| Role-Based Access Control (login/roles) | High | Medium–High | High | High | HIGH |
+
+---
+
+# Recommended ONE Enhancement for Capstone MVP (Proposal for Human Approval)
+
+## Proposal: **Enhanced Owner Search (Telephone + Pet Name)**
+(Recommended as the most feasible, high-value capstone MVP with contained scope.)
+
+### 1) Why this enhancement should be selected
+- It directly improves the most common front-desk workflow: quickly finding the right record.
+- It is **incremental** (extends existing “Find Owners” journey) without requiring major schema changes.
+
+### 2) Business value
+- Reduces time per customer interaction.
+- Reduces risk of creating duplicate owners when staff can’t find an existing record.
+
+### 3) User impact
+- Receptionists can search the way customers actually identify themselves (phone number) or by pet name.
+
+### 4) Feasibility within the existing application
+- The application already has:
+    - a search page (`/owners/find`) and list page (`owners/ownersList`)
+    - a repository-based query pattern for search (`OwnerRepository.findByLastNameStartingWith`)
+    - controller logic for pagination and redirect-on-single-result (`OwnerController.processFindForm`)
+- This enhancement primarily extends those existing points.
+
+### 5) Existing repository components related to the enhancement
+- `src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java`
+- `src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java`
+- `src/main/resources/templates/owners/findOwners.html`
+- `src/main/resources/templates/owners/ownersList.html`
+- Potentially `Owner`/`Pet` mappings for pet-name search joins:
+    - `src/main/java/.../owner/Owner.java` (pets collection)
+    - `src/main/java/.../owner/Pet.java` (name)
+
+### 6) Recommended MVP scope
+- Update “Find Owners” UI to allow:
+    - Telephone (exact match)
+    - Pet name (starts-with or contains)
+    - Keep last name prefix search
+- Update results page to clearly show matches and avoid confusion when multiple owners match.
+
+### 7) What should be deferred
+- Advanced filtering (address, city, combined boolean logic with many fields)
+- Fuzzy matching / normalization / phonetic search
+- Global search across visits/description
+- Performance tuning beyond basic indexing considerations (likely unnecessary at capstone scale)
+
+**Human-in-the-loop note:** This MVP recommendation is a proposal. A Product Owner/BA should confirm whether the capstone goal prioritizes “operational realism” (in which case appointment scheduling may be preferred) versus “high-impact, contained change” (search enhancement).
+
+If you want, I can provide an alternate MVP recommendation focused on *appointment scheduling* and clearly define a “minimal viable” version that avoids vet assignment and avoids large UI redesign—still analysis-only.
