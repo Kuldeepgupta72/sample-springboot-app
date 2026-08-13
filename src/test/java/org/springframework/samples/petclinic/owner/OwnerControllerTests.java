@@ -138,6 +138,7 @@ class OwnerControllerTests {
 		mockMvc.perform(get("/owners/find"))
 			.andExpect(status().isOk())
 			.andExpect(model().attributeExists("owner"))
+			.andExpect(model().attributeExists("searchCriteria"))
 			.andExpect(view().name("owners/findOwners"));
 	}
 
@@ -193,6 +194,163 @@ class OwnerControllerTests {
 			.andExpect(model().attributeHasFieldErrorCode("owner", "lastName", "notFound"))
 			.andExpect(view().name("owners/findOwners"));
 
+	}
+
+	// --- Enhanced search: TELEPHONE criterion ---
+
+	@Test
+	void processFindFormByTelephoneSingleMatchRedirects() throws Exception {
+		Page<Owner> match = new PageImpl<>(List.of(george()));
+		when(this.owners.findByTelephone(eq("6085551023"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "TELEPHONE").param("searchTerm", "6085551023"))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(view().name("redirect:/owners/" + TEST_OWNER_ID));
+	}
+
+	@Test
+	void processFindFormByTelephoneMultipleMatchesRendersList() throws Exception {
+		Page<Owner> match = new PageImpl<>(List.of(george(), new Owner()));
+		when(this.owners.findByTelephone(eq("6085551023"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "TELEPHONE").param("searchTerm", "6085551023"))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/ownersList"))
+			.andExpect(model().attribute("criterion", OwnerSearchCriteria.Criterion.TELEPHONE))
+			.andExpect(model().attribute("searchTerm", "6085551023"));
+	}
+
+	@Test
+	void processFindFormByTelephoneBlankRejected() throws Exception {
+		mockMvc.perform(get("/owners?page=1").param("criterion", "TELEPHONE").param("searchTerm", "   "))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/findOwners"))
+			.andExpect(model().attributeHasFieldErrors("searchCriteria", "searchTerm"))
+			.andExpect(model().attributeHasFieldErrorCode("searchCriteria", "searchTerm", "notFound"));
+	}
+
+	@Test
+	void processFindFormByTelephoneNotFound() throws Exception {
+		when(this.owners.findByTelephone(eq("0000000000"), any(Pageable.class))).thenReturn(new PageImpl<>(List.of()));
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "TELEPHONE").param("searchTerm", "0000000000"))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/findOwners"))
+			.andExpect(model().attributeHasFieldErrors("searchCriteria", "searchTerm"))
+			.andExpect(model().attributeHasFieldErrorCode("searchCriteria", "searchTerm", "notFound"));
+	}
+
+	@Test
+	void processFindFormByTelephoneTrimsSearchTerm() throws Exception {
+		Page<Owner> match = new PageImpl<>(List.of(george()));
+		when(this.owners.findByTelephone(eq("6085551023"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "TELEPHONE").param("searchTerm", "  6085551023 "))
+			.andExpect(status().is3xxRedirection());
+
+		verify(this.owners).findByTelephone(eq("6085551023"), any(Pageable.class));
+	}
+
+	// --- Enhanced search: PET_NAME criterion ---
+
+	@Test
+	void processFindFormByPetNameContainsMatch() throws Exception {
+		Page<Owner> match = new PageImpl<>(List.of(george(), new Owner()));
+		when(this.owners.findDistinctByPetNameContainingIgnoreCase(eq("ax"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "PET_NAME").param("searchTerm", "ax"))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/ownersList"))
+			.andExpect(model().attribute("criterion", OwnerSearchCriteria.Criterion.PET_NAME))
+			.andExpect(model().attribute("searchTerm", "ax"));
+	}
+
+	@Test
+	void processFindFormByPetNameCaseInsensitive() throws Exception {
+		Page<Owner> match = new PageImpl<>(List.of(george()));
+		// controller passes the trimmed term through unchanged; case-insensitivity is
+		// the responsibility of the repository query.
+		when(this.owners.findDistinctByPetNameContainingIgnoreCase(eq("MAX"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "PET_NAME").param("searchTerm", "MAX"))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(view().name("redirect:/owners/" + TEST_OWNER_ID));
+	}
+
+	@Test
+	void processFindFormByPetNameSingleOwnerAppearsOnce() throws Exception {
+		// Simulate the "distinct" behavior at the repository boundary: even if an owner
+		// has multiple matching pets, they are returned exactly once.
+		Page<Owner> match = new PageImpl<>(List.of(george()));
+		when(this.owners.findDistinctByPetNameContainingIgnoreCase(eq("a"), any(Pageable.class))).thenReturn(match);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "PET_NAME").param("searchTerm", "a"))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(view().name("redirect:/owners/" + TEST_OWNER_ID));
+
+		verify(this.owners).findDistinctByPetNameContainingIgnoreCase(eq("a"), any(Pageable.class));
+	}
+
+	@Test
+	void processFindFormByPetNameBlankRejected() throws Exception {
+		mockMvc.perform(get("/owners?page=1").param("criterion", "PET_NAME").param("searchTerm", "   "))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/findOwners"))
+			.andExpect(model().attributeHasFieldErrors("searchCriteria", "searchTerm"))
+			.andExpect(model().attributeHasFieldErrorCode("searchCriteria", "searchTerm", "notFound"));
+	}
+
+	@Test
+	void processFindFormByPetNameNotFound() throws Exception {
+		when(this.owners.findDistinctByPetNameContainingIgnoreCase(eq("xyz"), any(Pageable.class)))
+			.thenReturn(new PageImpl<>(List.of()));
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "PET_NAME").param("searchTerm", "xyz"))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/findOwners"))
+			.andExpect(model().attributeHasFieldErrors("searchCriteria", "searchTerm"))
+			.andExpect(model().attributeHasFieldErrorCode("searchCriteria", "searchTerm", "notFound"));
+	}
+
+	// --- Default criterion when only searchTerm supplied ---
+
+	@Test
+	void processFindFormDefaultsToLastNameWhenOnlySearchTermSupplied() throws Exception {
+		Page<Owner> tasks = new PageImpl<>(List.of(george()));
+		when(this.owners.findByLastNameStartingWith(eq("Franklin"), any(Pageable.class))).thenReturn(tasks);
+
+		mockMvc.perform(get("/owners?page=1").param("searchTerm", "Franklin"))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(view().name("redirect:/owners/" + TEST_OWNER_ID));
+
+		verify(this.owners).findByLastNameStartingWith(eq("Franklin"), any(Pageable.class));
+	}
+
+	// --- Pagination model exposes criterion / searchTerm ---
+
+	@Test
+	void processFindFormPaginationModelExposesCriterionAndSearchTerm() throws Exception {
+		Page<Owner> tasks = new PageImpl<>(List.of(george(), new Owner()));
+		when(this.owners.findByLastNameStartingWith(eq("Fra"), any(Pageable.class))).thenReturn(tasks);
+
+		mockMvc.perform(get("/owners?page=1").param("criterion", "LAST_NAME").param("searchTerm", "Fra"))
+			.andExpect(status().isOk())
+			.andExpect(view().name("owners/ownersList"))
+			.andExpect(model().attribute("criterion", OwnerSearchCriteria.Criterion.LAST_NAME))
+			.andExpect(model().attribute("searchTerm", "Fra"))
+			.andExpect(model().attributeExists("currentPage", "totalPages", "totalItems", "listOwners"));
+	}
+
+	// --- Backward compat: legacy lastName still works when no new params supplied ---
+
+	@Test
+	void processFindFormLegacyLastNameStillWorks() throws Exception {
+		Page<Owner> tasks = new PageImpl<>(List.of(george()));
+		when(this.owners.findByLastNameStartingWith(eq("Franklin"), any(Pageable.class))).thenReturn(tasks);
+
+		mockMvc.perform(get("/owners").param("lastName", "Franklin"))
+			.andExpect(status().is3xxRedirection())
+			.andExpect(view().name("redirect:/owners/" + TEST_OWNER_ID));
 	}
 
 	@Test

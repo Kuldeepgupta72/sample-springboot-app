@@ -6,15 +6,27 @@
 
   <h2 th:text="#{findOwners}">Find Owners</h2>
 
-  <form th:object="${owner}" th:action="@{/owners}" method="get" class="form-horizontal" id="search-owner-form">
+  <form th:object="${searchCriteria}" th:action="@{/owners}" method="get" class="form-horizontal" id="search-owner-form">
     <div class="form-group">
-      <div class="control-group" id="lastNameGroup">
-        <label class="col-sm-2 control-label" th:text="#{lastName}">Last name </label>
+      <div class="control-group" id="criterionGroup">
+        <label class="col-sm-2 control-label" th:text="#{criterion}">Search By</label>
         <div class="col-sm-10">
-          <input class="form-control" th:field="*{lastName}" size="30" maxlength="80" />
+          <select class="form-control" th:field="*{criterion}">
+            <option th:value="LAST_NAME" th:text="#{criterion.lastName}">Last Name</option>
+            <option th:value="TELEPHONE" th:text="#{criterion.telephone}">Telephone</option>
+            <option th:value="PET_NAME" th:text="#{criterion.petName}">Pet Name</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="control-group" id="searchTermGroup">
+        <label class="col-sm-2 control-label" th:text="#{searchTerm}">Search Term</label>
+        <div class="col-sm-10">
+          <input class="form-control" th:field="*{searchTerm}" size="30" maxlength="80" />
           <span class="help-inline">
-            <div th:if="${#fields.hasAnyErrors()}">
-              <p th:each="err : ${#fields.allErrors()}" th:text="${err}">Error</p>
+            <div th:if="${#fields.hasErrors('searchTerm')}">
+              <p th:each="err : ${#fields.errors('searchTerm')}" th:text="${err}">Error</p>
             </div>
           </span>
         </div>

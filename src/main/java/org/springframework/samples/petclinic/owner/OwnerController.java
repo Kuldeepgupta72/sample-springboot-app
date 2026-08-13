@@ -50,6 +50,8 @@ class OwnerController {
 
 	private static final String VIEWS_OWNER_CREATE_OR_UPDATE_FORM = "owners/createOrUpdateOwnerForm";
 
+	private static final int PAGE_SIZE = 5;
+
 	private final OwnerRepository owners;
 
 	public OwnerController(OwnerRepository owners) {
@@ -67,6 +69,15 @@ class OwnerController {
 				: this.owners.findById(ownerId)
 					.orElseThrow(() -> new IllegalArgumentException("Owner not found with id: " + ownerId
 							+ ". Please ensure the ID is correct " + "and the owner exists in the database."));
+	}
+
+	/**
+	 * Expose an empty {@link OwnerSearchCriteria} to the Find Owners form so Thymeleaf
+	 * can bind the criterion dropdown and the search term input.
+	 */
+	@ModelAttribute("searchCriteria")
+	public OwnerSearchCriteria searchCriteria() {
+		return new OwnerSearchCriteria();
 	}
 
 	@GetMapping("/owners/new")
@@ -92,48 +103,112 @@ class OwnerController {
 	}
 
 	@GetMapping("/owners")
-	public String processFindForm(@RequestParam(defaultValue = "1") int page, Owner owner, BindingResult result,
-			Model model) {
-		// allow parameterless GET request for /owners to return all records
-		String lastName = owner.getLastName();
-		if (lastName == null) {
-			lastName = ""; // empty string signifies broadest possible search
-		}
-		else {
-			lastName = lastName.strip();
+	public String processFindForm(@RequestParam(defaultValue = "1") int page,
+			@ModelAttribute("searchCriteria") OwnerSearchCriteria searchCriteria, BindingResult searchResult,
+			@RequestParam(name = "lastName", required = false) String legacyLastName, Owner owner,
+			BindingResult ownerResult, Model model) {
+
+		// Detect which "form" the request came from.
+		// New form: has criterion or searchTerm parameters (takes precedence).
+		// Legacy path: only lastName parameter present.
+		boolean newFormSubmitted = searchCriteria != null
+				&& (searchCriteria.getSearchTerm() != null || hasExplicitCriterion(searchCriteria));
+
+		if (!newFormSubmitted && legacyLastName != null) {
+			// Legacy request: preserve pre-existing behavior (errors on owner.lastName).
+			return processLegacyLastNameSearch(page, legacyLastName, owner, ownerResult, model);
 		}
 
-		// find owners by last name
+		// New form path (default criterion is LAST_NAME).
+		OwnerSearchCriteria criteria = (searchCriteria != null) ? searchCriteria : new OwnerSearchCriteria();
+		String term = criteria.trimmedSearchTerm();
+		OwnerSearchCriteria.Criterion criterion = criteria.getCriterion();
+
+		Page<Owner> results;
+		switch (criterion) {
+			case TELEPHONE -> {
+				if (term.isEmpty()) {
+					searchResult.rejectValue("searchTerm", "notFound", "not found");
+					return "owners/findOwners";
+				}
+				results = findByTelephonePaginated(page, term);
+			}
+			case PET_NAME -> {
+				if (term.isEmpty()) {
+					searchResult.rejectValue("searchTerm", "notFound", "not found");
+					return "owners/findOwners";
+				}
+				results = findByPetNamePaginated(page, term);
+			}
+			case LAST_NAME -> results = findPaginatedForOwnersLastName(page, term);
+			default -> results = findPaginatedForOwnersLastName(page, term);
+		}
+
+		if (results.isEmpty()) {
+			searchResult.rejectValue("searchTerm", "notFound", "not found");
+			return "owners/findOwners";
+		}
+
+		if (results.getTotalElements() == 1) {
+			Owner single = results.iterator().next();
+			return "redirect:/owners/" + single.getId();
+		}
+
+		return addPaginationModel(page, model, results, criterion, term);
+	}
+
+	private static boolean hasExplicitCriterion(OwnerSearchCriteria criteria) {
+		// A non-default criterion is a signal that the new form was used even if the
+		// search term is null. LAST_NAME is the default so we cannot rely on it alone.
+		return criteria.getCriterion() != null && criteria.getCriterion() != OwnerSearchCriteria.Criterion.LAST_NAME;
+	}
+
+	private String processLegacyLastNameSearch(int page, String legacyLastName, Owner owner, BindingResult ownerResult,
+			Model model) {
+		String lastName = legacyLastName == null ? "" : legacyLastName.strip();
+		// Keep the Owner model attribute in sync so any error/view rendering can display
+		// the submitted value.
+		owner.setLastName(lastName);
+
 		Page<Owner> ownersResults = findPaginatedForOwnersLastName(page, lastName);
 		if (ownersResults.isEmpty()) {
-			// no owners found
-			result.rejectValue("lastName", "notFound", "not found");
+			ownerResult.rejectValue("lastName", "notFound", "not found");
 			return "owners/findOwners";
 		}
 
 		if (ownersResults.getTotalElements() == 1) {
-			// 1 owner found
-			owner = ownersResults.iterator().next();
-			return "redirect:/owners/" + owner.getId();
+			Owner single = ownersResults.iterator().next();
+			return "redirect:/owners/" + single.getId();
 		}
 
-		// multiple owners found
-		return addPaginationModel(page, model, ownersResults);
+		return addPaginationModel(page, model, ownersResults, OwnerSearchCriteria.Criterion.LAST_NAME, lastName);
 	}
 
-	private String addPaginationModel(int page, Model model, Page<Owner> paginated) {
+	private String addPaginationModel(int page, Model model, Page<Owner> paginated,
+			OwnerSearchCriteria.Criterion criterion, String searchTerm) {
 		List<Owner> listOwners = paginated.getContent();
 		model.addAttribute("currentPage", page);
 		model.addAttribute("totalPages", paginated.getTotalPages());
 		model.addAttribute("totalItems", paginated.getTotalElements());
 		model.addAttribute("listOwners", listOwners);
+		model.addAttribute("criterion", criterion);
+		model.addAttribute("searchTerm", searchTerm == null ? "" : searchTerm);
 		return "owners/ownersList";
 	}
 
 	private Page<Owner> findPaginatedForOwnersLastName(int page, String lastname) {
-		int pageSize = 5;
-		Pageable pageable = PageRequest.of(page - 1, pageSize);
+		Pageable pageable = PageRequest.of(page - 1, PAGE_SIZE);
 		return owners.findByLastNameStartingWith(lastname, pageable);
+	}
+
+	private Page<Owner> findByTelephonePaginated(int page, String telephone) {
+		Pageable pageable = PageRequest.of(page - 1, PAGE_SIZE);
+		return owners.findByTelephone(telephone, pageable);
+	}
+
+	private Page<Owner> findByPetNamePaginated(int page, String petName) {
+		Pageable pageable = PageRequest.of(page - 1, PAGE_SIZE);
+		return owners.findDistinctByPetNameContainingIgnoreCase(petName, pageable);
 	}
 
 	@GetMapping("/owners/{ownerId}/edit")

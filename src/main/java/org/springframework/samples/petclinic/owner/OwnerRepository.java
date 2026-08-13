@@ -20,6 +20,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Repository class for <code>Owner</code> domain objects. All method names are compliant
@@ -43,6 +45,30 @@ public interface OwnerRepository extends JpaRepository<Owner, Integer> {
 	 * found)
 	 */
 	Page<Owner> findByLastNameStartingWith(String lastName, Pageable pageable);
+
+	/**
+	 * Retrieve {@link Owner}s from the data store by their telephone number, using an
+	 * exact match. Telephone values are stored as free-form strings; callers are expected
+	 * to pass a trimmed value.
+	 * @param telephone the telephone number to match exactly
+	 * @param pageable pagination information
+	 * @return a page of matching {@link Owner}s (empty if none found)
+	 */
+	Page<Owner> findByTelephone(String telephone, Pageable pageable);
+
+	/**
+	 * Retrieve distinct {@link Owner}s that have at least one pet whose name contains the
+	 * given fragment (case-insensitive). An owner with multiple matching pets is returned
+	 * exactly once.
+	 * @param petName pet-name fragment to match (case-insensitive contains)
+	 * @param pageable pagination information
+	 * @return a page of distinct matching {@link Owner}s
+	 */
+	@Query(value = "SELECT DISTINCT o FROM Owner o JOIN o.pets p "
+			+ "WHERE LOWER(p.name) LIKE LOWER(CONCAT('%', :petName, '%'))",
+			countQuery = "SELECT COUNT(DISTINCT o) FROM Owner o JOIN o.pets p "
+					+ "WHERE LOWER(p.name) LIKE LOWER(CONCAT('%', :petName, '%'))")
+	Page<Owner> findDistinctByPetNameContainingIgnoreCase(@Param("petName") String petName, Pageable pageable);
 
 	/**
 	 * Retrieve an {@link Owner} from the data store by id.
