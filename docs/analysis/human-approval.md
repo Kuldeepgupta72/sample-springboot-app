@@ -1,127 +1,63 @@
-## Design Review — HITL #5
+## Development and Code Review — HITL #6
 
-### Design Artifact
+### Implementation
 
-Design Package for SDLC-1 — Enhanced Owner Search
+Enhanced Owner Search MVP was implemented using Claude Code through
+CodeMie.
 
-### Human Review Decision
+### Jira Scope Implemented
 
-APPROVED WITH CONDITIONS
+- SDLC-2 — Maintain Last Name Prefix Search
+- SDLC-3 — Search Owners by Telephone
+- SDLC-4 — Search Owners by Pet Name
+- SDLC-5 — Preserve Search Results and Pagination
 
-### Approved Design Decisions
+### Implementation Review
 
-#### 1. Target Architecture
+The implementation was reviewed against the approved requirements,
+implementation plan, and design.
 
-The design will retain the existing Spring PetClinic MVC
-architecture:
+### Review Findings
 
-Browser → OwnerController → OwnerRepository → Database
+- Last Name prefix search preserved.
+- Telephone exact-match search implemented.
+- Telephone whitespace trimming implemented.
+- Pet Name case-insensitive contains search implemented.
+- Duplicate owners prevented for multiple matching pets.
+- Search criterion and search term preserved during pagination.
+- Existing one-result behavior preserved.
+- Existing no-result behavior preserved.
+- Existing multiple-result behavior preserved.
+- Dedicated OwnerSearchCriteria introduced.
+- No database schema changes introduced.
+- No unrelated functional scope identified.
 
-No new service layer will be introduced for the MVP.
+### Automated Validation
 
-#### 2. Search Form
+Maven test suite:
 
-Introduce:
+- Tests executed: 87
+- Failures: 0
+- Errors: 0
+- Skipped: 2
+- Build: SUCCESS
 
-OwnerSearchCriteria
+### Integration Test Limitation
 
-with:
+PostgreSQL/Testcontainers integration testing was not executed because
+a valid Docker environment was unavailable.
 
-- criterion
-- searchTerm
+This remains a validation item before final merge/deployment.
 
-Supported criteria:
+### Human Code Review Decision
 
-- LAST_NAME
-- TELEPHONE
-- PET_NAME
+APPROVED WITH CONDITION
 
-#### 3. Default Criterion
+### Condition
 
-The default search criterion is:
-
-LAST_NAME
-
-This preserves existing behavior.
-
-#### 4. Backward Compatibility
-
-Existing requests using the `lastName` request parameter must continue
-to work.
-
-When the legacy parameter is provided without the new search
-parameters, the request will be treated as a Last Name search.
-
-#### 5. Telephone Search
-
-Telephone search will:
-
-- Trim whitespace.
-- Require a non-empty value.
-- Perform exact matching.
-- Not perform normalization.
-- Not enforce the Owner creation/update 10-digit telephone pattern.
-
-#### 6. Pet Name Search
-
-Pet Name search will:
-
-- Trim whitespace.
-- Perform case-insensitive contains matching.
-- Return unique owners.
-- Preserve pagination.
-
-#### 7. Database
-
-No database schema changes are required or planned.
-
-#### 8. Pagination
-
-Pagination must preserve:
-
-- criterion
-- searchTerm
-- page
-
-#### 9. Error Handling
-
-Existing Last Name not-found behavior will be preserved.
-
-Telephone and Pet Name validation/not-found errors will be associated
-with OwnerSearchCriteria.searchTerm.
-
-### Conditions Before Development
-
-1. Verify the actual Thymeleaf templates in the working development
-   branch/environment.
-
-2. Verify whether shared Thymeleaf fragments are used for the Find
-   Owners and Owners List pages.
-
-3. Verify the existing pagination markup before implementing changes.
-
-4. Verify DISTINCT + pagination behavior through integration tests
-   across supported databases.
-
-### Deferred
-
-The following remain out of scope:
-
-- Fuzzy search
-- Phonetic search
-- Address search
-- City search
-- Visit-description search
-- Global search
-- Boolean search
-- Telephone normalization
-- Advanced performance optimization
-- Match-reason highlighting
-
-### Human Decision
-
-APPROVED WITH CONDITIONS
+PostgreSQL/Testcontainers integration tests must be executed in an
+environment with Docker before final merge.
 
 ### Status
 
-Design approved for development after template verification.
+Implementation approved for Pull Request / integration testing.
