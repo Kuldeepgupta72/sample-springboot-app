@@ -1,63 +1,38 @@
-## Development and Code Review — HITL #6
+Review the generated test cases against the approved human-approval.md.
 
-### Implementation
+Make the following corrections before requesting human approval:
 
-Enhanced Owner Search MVP was implemented using Claude Code through
-CodeMie.
+1. Remove the SDLC-2 scenario that requires last-name whitespace trimming.
+   Last-name whitespace trimming was not part of the approved MVP.
 
-### Jira Scope Implemented
+2. Remove the SDLC-3 scenario "Only one criterion is applied at a time
+   (telephone)" because testing combined telephone + lastName criteria
+   is outside the approved MVP scope.
 
-- SDLC-2 — Maintain Last Name Prefix Search
-- SDLC-3 — Search Owners by Telephone
-- SDLC-4 — Search Owners by Pet Name
-- SDLC-5 — Preserve Search Results and Pagination
+3. Remove the SDLC-4 scenario "Only one criterion is applied at a time
+   (pet name)" because testing combined pet name + lastName criteria
+   is outside the approved MVP scope.
 
-### Implementation Review
+4. For empty telephone and empty pet-name validation, verify whether
+   this behavior is explicitly present in the approved Jira acceptance
+   criteria. If it is not, mark these scenarios as optional/non-MVP
+   rather than mandatory requirements.
 
-The implementation was reviewed against the approved requirements,
-implementation plan, and design.
+5. Keep the approved scenarios covering:
+    - last-name prefix search
+    - telephone exact match
+    - telephone surrounding whitespace trimming
+    - no telephone normalization
+    - pet-name contains matching
+    - case-insensitive pet-name matching
+    - pet-name whitespace trimming
+    - duplicate owner prevention
+    - one/no/multiple result behavior
+    - pagination and preservation of search context
 
-### Review Findings
+6. Produce an updated Jira-story-to-test-case traceability matrix.
 
-- Last Name prefix search preserved.
-- Telephone exact-match search implemented.
-- Telephone whitespace trimming implemented.
-- Pet Name case-insensitive contains search implemented.
-- Duplicate owners prevented for multiple matching pets.
-- Search criterion and search term preserved during pagination.
-- Existing one-result behavior preserved.
-- Existing no-result behavior preserved.
-- Existing multiple-result behavior preserved.
-- Dedicated OwnerSearchCriteria introduced.
-- No database schema changes introduced.
-- No unrelated functional scope identified.
+Do not add new requirements.
 
-### Automated Validation
-
-Maven test suite:
-
-- Tests executed: 87
-- Failures: 0
-- Errors: 0
-- Skipped: 2
-- Build: SUCCESS
-
-### Integration Test Limitation
-
-PostgreSQL/Testcontainers integration testing was not executed because
-a valid Docker environment was unavailable.
-
-This remains a validation item before final merge/deployment.
-
-### Human Code Review Decision
-
-APPROVED WITH CONDITION
-
-### Condition
-
-PostgreSQL/Testcontainers integration tests must be executed in an
-environment with Docker before final merge.
-
-### Status
-
-Implementation approved for Pull Request / integration testing.
+Return the corrected test suite and clearly mark it:
+HUMAN REVIEW REQUIRED.
