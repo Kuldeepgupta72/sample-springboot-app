@@ -62,52 +62,59 @@ environment with Docker before final merge.
 
 Implementation approved for Pull Request / integration testing.
 
-## Test Execution Review — HITL #8
+## Test Case Review — HITL #7
 
 ### Scope
 
 Enhanced Owner Search MVP
 
-### Automated Test Execution
+### Jira Stories
 
-Framework:
-Spring Boot @SpringBootTest + MockMvc + JUnit 5
+- SDLC-2 — Maintain Last Name Prefix Search
+- SDLC-3 — Search Owners by Telephone
+- SDLC-4 — Search Owners by Pet Name
+- SDLC-5 — Preserve Search Results and Pagination
 
-### Results
+### Human Review
 
-- Enhanced Owner Search tests: 20
-- Passed: 20
-- Failed: 0
-- Blocked: 0
-- Full regression tests: 107
-- Full regression failures: 0
-- Pre-existing skipped tests: 2
+The corrected Gherkin test suite was reviewed against the approved
+requirements and human-approved MVP scope.
 
-### Production Code
+### Validation
 
-No production application code was modified during test automation.
+- Last Name prefix search: APPROVED
+- Last Name backward compatibility: APPROVED
+- Telephone exact match: APPROVED
+- Telephone whitespace trimming: APPROVED
+- Telephone normalization exclusion: APPROVED
+- Pet Name contains search: APPROVED
+- Pet Name case-insensitive search: APPROVED
+- Pet Name whitespace trimming: APPROVED
+- Unique owner results: APPROVED
+- One/no/multiple result behavior: APPROVED
+- Pagination preservation: APPROVED
+- Combined search criteria: EXCLUDED
+- Out-of-scope functionality: EXCLUDED
 
-### Limitations
+### Conditions
 
-- Browser-level Playwright/Selenium execution was not available.
-- Tests use MockMvc rather than a real browser.
-- PostgreSQL/Testcontainers execution remains pending because Docker
-  is unavailable.
-- H2 was used for the integration tests.
+1. Empty Telephone validation remains optional until the Jira
+   acceptance criteria are verified.
+
+2. Empty Pet Name validation remains optional until the Jira
+   acceptance criteria are verified.
+
+3. Placeholder test data must be resolved before automated execution.
+
+4. All generated scenarios remain pending execution.
 
 ### Human Decision
 
 APPROVED WITH CONDITIONS
 
-### Conditions
-
-1. PostgreSQL/Testcontainers validation remains pending.
-2. Browser-level UI automation is not claimed as completed.
-3. Test automation changes must remain limited to test files.
-
 ### Status
 
-Automated functional testing approved with documented limitations.
+Test cases approved for automated test implementation and execution.
 
 ## Test Execution Review — HITL #8
 
