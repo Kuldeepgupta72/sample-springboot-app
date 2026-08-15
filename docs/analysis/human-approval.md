@@ -1,38 +1,53 @@
-Review the generated test cases against the approved human-approval.md.
+## Test Case Review — HITL #7
 
-Make the following corrections before requesting human approval:
+### Scope
 
-1. Remove the SDLC-2 scenario that requires last-name whitespace trimming.
-   Last-name whitespace trimming was not part of the approved MVP.
+Enhanced Owner Search MVP
 
-2. Remove the SDLC-3 scenario "Only one criterion is applied at a time
-   (telephone)" because testing combined telephone + lastName criteria
-   is outside the approved MVP scope.
+### Jira Stories
 
-3. Remove the SDLC-4 scenario "Only one criterion is applied at a time
-   (pet name)" because testing combined pet name + lastName criteria
-   is outside the approved MVP scope.
+- SDLC-2 — Maintain Last Name Prefix Search
+- SDLC-3 — Search Owners by Telephone
+- SDLC-4 — Search Owners by Pet Name
+- SDLC-5 — Preserve Search Results and Pagination
 
-4. For empty telephone and empty pet-name validation, verify whether
-   this behavior is explicitly present in the approved Jira acceptance
-   criteria. If it is not, mark these scenarios as optional/non-MVP
-   rather than mandatory requirements.
+### Human Review
 
-5. Keep the approved scenarios covering:
-    - last-name prefix search
-    - telephone exact match
-    - telephone surrounding whitespace trimming
-    - no telephone normalization
-    - pet-name contains matching
-    - case-insensitive pet-name matching
-    - pet-name whitespace trimming
-    - duplicate owner prevention
-    - one/no/multiple result behavior
-    - pagination and preservation of search context
+The corrected Gherkin test suite was reviewed against the approved
+requirements and human-approved MVP scope.
 
-6. Produce an updated Jira-story-to-test-case traceability matrix.
+### Validation
 
-Do not add new requirements.
+- Last Name prefix search: APPROVED
+- Last Name backward compatibility: APPROVED
+- Telephone exact match: APPROVED
+- Telephone whitespace trimming: APPROVED
+- Telephone normalization exclusion: APPROVED
+- Pet Name contains search: APPROVED
+- Pet Name case-insensitive search: APPROVED
+- Pet Name whitespace trimming: APPROVED
+- Unique owner results: APPROVED
+- One/no/multiple result behavior: APPROVED
+- Pagination preservation: APPROVED
+- Combined search criteria: EXCLUDED
+- Out-of-scope functionality: EXCLUDED
 
-Return the corrected test suite and clearly mark it:
-HUMAN REVIEW REQUIRED.
+### Conditions
+
+1. Empty Telephone validation remains optional until the Jira
+   acceptance criteria are verified.
+
+2. Empty Pet Name validation remains optional until the Jira
+   acceptance criteria are verified.
+
+3. Placeholder test data must be resolved before automated execution.
+
+4. All generated scenarios remain pending execution.
+
+### Human Decision
+
+APPROVED WITH CONDITIONS
+
+### Status
+
+Test cases approved for automated test implementation and execution.
